@@ -123,22 +123,29 @@ export const checkOpenrestyInitiated = () => {
 const decoder = new StringDecoder('utf8');
 
 export const resetDb = (containers, logger) => {
-  const psql = runSql(['postgres',
-    '-c', `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}';`,
-    '-c', `DROP DATABASE if exists ${DB_NAME};`,
-    '-c', `CREATE DATABASE ${DB_NAME};`
-  ], logger);
+  const psql = runSql([DB_NAME, '-f', `${DB_DIR}/sample_data/reset.sql`,], logger);
   psql.stderr.on('data', data => logger.log(decoder.write(data)));
-  psql.on('close', code =>{
-    const _psql = runSql( [DB_NAME, '-f', DB_DIR +'init.sql' ], logger)
-    _psql.stderr.on('data', data => logger.log(decoder.write(data)));
-    _psql.on('close', (code) => {
-      if(code == 0){
-        if(containers['postgrest']) {sendHUP(containers['postgrest'].name);}
-        if(containers['openresty']) {sendHUP(containers['openresty'].name);}
-      }
-    })
+  psql.on('close', (code) => {
+    if(code == 0){
+      const _psql = runSql(['postgres',
+        '-c', `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}';`,
+        '-c', `DROP DATABASE if exists ${DB_NAME};`,
+        '-c', `CREATE DATABASE ${DB_NAME};`
+      ], logger);
+      _psql.stderr.on('data', data => logger.log(decoder.write(data)));
+      _psql.on('close', code =>{
+        const __psql = runSql( [DB_NAME, '-f', DB_DIR +'init.sql' ], logger)
+        __psql.stderr.on('data', data => logger.log(decoder.write(data)));
+        __psql.on('close', (code) => {
+          if(code == 0){
+            if(containers['postgrest']) {sendHUP(containers['postgrest'].name);}
+            if(containers['openresty']) {sendHUP(containers['openresty'].name);}
+          }
+        })
+      });
+    }
   });
+
   return psql;
 }
 
